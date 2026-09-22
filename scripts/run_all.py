@@ -6,12 +6,12 @@ Question: does the pipeline recover the experimental benchmark?
 """
 import sys, pathlib
 import numpy as np, pandas as pd
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from src import psm
+from src import psm, figures
 
 RAW = ROOT / "data/raw/lalonde"
-OUT = pathlib.Path(__file__).parent / "results"; OUT.mkdir(exist_ok=True)
+OUT = ROOT / "outputs" / "tables"; OUT.mkdir(parents=True, exist_ok=True)
 COLS = ["treat", "age", "educ", "black", "hisp", "married", "nodegree", "re74", "re75", "re78"]
 load = lambda n: pd.read_csv(RAW / f"{n}.txt", sep=r"\s+", header=None, names=COLS)
 nsw_t, nsw_c = load("nswre74_treated"), load("nswre74_control")
@@ -73,8 +73,8 @@ for pool_name, pool in pools.items():
             rows.append(dict(pool=pool_name, spec=spec, method=label, est=r["est"], ci_lo=r["ci_lo"], ci_hi=r["ci_hi"], n=r["n_pairs"], max_abs_smd=mx))
             print(f"    {label:42s} ATT={r['est']:8,.0f}  CI[{r['ci_lo']:7,.0f},{r['ci_hi']:7,.0f}]  pairs={r['n_pairs']:3d}  max|SMD|={mx:.2f}")
             if spec == "dw" and "with replace" in label:
-                psm.love_plot(bal, OUT / f"love_{pool_name}.png", f"{pool_name}: balance, DW spec")
-                psm.overlap_plot(ps, t, OUT / f"overlap_{pool_name}.png", f"{pool_name}: propensity overlap")
+                figures.love_plot(bal, f"love_{pool_name.lower()}", f"{pool_name}: balance, DW spec")
+                figures.overlap_plot(ps, t, f"overlap_{pool_name.lower()}", f"{pool_name}: propensity overlap")
 
         # weighting / doubly robust
         for est_name, kw in {"IPW ATT (trim .01-.99)": dict(estimand="ATT", trim=(.01, .99)),

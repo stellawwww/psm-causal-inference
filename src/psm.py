@@ -114,28 +114,8 @@ def balance_table(X: pd.DataFrame, t: np.ndarray, pairs: pd.DataFrame,
     return out
 
 
-def love_plot(bal: pd.DataFrame, path: str, title: str = "") -> None:
-    import matplotlib; matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    b = bal.reindex(bal["before"].abs().sort_values().index)
-    fig, ax = plt.subplots(figsize=(6, 0.35 * len(b) + 1.5))
-    for col, mk in zip(b.columns, ["o", "s", "^"]):
-        ax.scatter(b[col].abs(), b.index, marker=mk, label=col)
-    for x in (0.1, 0.25):
-        ax.axvline(x, ls="--", lw=0.8, color="grey")
-    ax.set_xlabel("|standardized mean difference|"); ax.set_title(title); ax.legend()
-    fig.tight_layout(); fig.savefig(path, dpi=130); plt.close(fig)
-
-
-def overlap_plot(ps: np.ndarray, t: np.ndarray, path: str, title: str = "") -> None:
-    import matplotlib; matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(figsize=(6, 3.5))
-    bins = np.linspace(0, 1, 41)
-    ax.hist(ps[t == 0], bins, alpha=.5, density=True, label="control")
-    ax.hist(ps[t == 1], bins, alpha=.5, density=True, label="treated")
-    ax.set_xlabel("propensity score"); ax.set_title(title); ax.legend()
-    fig.tight_layout(); fig.savefig(path, dpi=130); plt.close(fig)
+# Plotting lives in src/figures.py so this module stays pure computation.
+# Use figures.love_plot(balance_table(...), name) and figures.overlap_plot(ps, t, name).
 
 
 # ---------------------------------------------------------------- estimators

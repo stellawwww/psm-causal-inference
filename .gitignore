@@ -1,5 +1,16 @@
+# python
 __pycache__/
 *.pyc
-.ipynb_checkpoints/
-.DS_Store
 venv/
+.venv/
+
+# notebooks
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# note: outputs/ IS committed. The README and the portfolio page both reference
+# figures from outputs/figures/, and the intermediate CSVs in outputs/data/ let a
+# reader inspect each stage without running anything.

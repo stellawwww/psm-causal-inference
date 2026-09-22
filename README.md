@@ -36,7 +36,7 @@ The naive comparison is not merely biased, it has the **wrong sign** and is off 
 
 Covariate balance improves from |SMD| up to 2.4 before matching to below 0.2 after:
 
-![Covariate balance, CPS pool](validation/lalonde/results/love_CPS.png)
+![Covariate balance, CPS pool](outputs/figures/psm_love_cps.png)
 
 ## What breaks it
 
@@ -51,27 +51,39 @@ The interesting findings are not that the method works. They are the conditions 
 ## Repository layout
 
 ```
-src/psm.py                        reusable toolkit, dataset agnostic
-  fit_propensity                  logistic or gradient boosting, optional cross-fitting
-  nn_match                        greedy 1:1 NN, caliper on logit or raw scale, explicit pair_id
-  smd / balance_table / love_plot balance diagnostics with fixed reference SD
-  att_matched                     paired t-test plus pair-level bootstrap
-  ipw_weights / ipw_estimate      explicit ATT vs ATE weights, HC1 robust SE
-  aipw_att                        doubly robust estimator with bootstrap CI
+src/psm.py          estimation toolkit, dataset agnostic
+  fit_propensity      logistic or gradient boosting, optional cross-fitting
+  nn_match            greedy 1:1 NN, caliper on logit or raw scale, explicit pair_id
+  smd / balance_table standardized differences against a fixed reference SD
+  att_matched         paired t-test plus pair-level bootstrap
+  ipw_weights / ipw_estimate   explicit ATT vs ATE weights, HC1 robust SE
+  aipw_att            doubly robust estimator with bootstrap CI
+src/figures.py      every plot in the project, saved through one convention
+src/data.py         loading and covariate specifications
 
-validation/lalonde/run_lalonde.py  2 control pools x 3 covariate specs x 6 estimators
-validation/lalonde/results/        results.csv, love plots, overlap plots
-data/raw/lalonde/                  the four source files, with provenance
+notebooks/          the analysis, one notebook per pipeline stage
+  01_data_prep         raw files to analysis sample
+  02_propensity_model  propensity scores and overlap
+  03_matching_balance  matching and balance diagnostics
+  04_effects_att       ATT, IPW, doubly robust, against the benchmark
+
+scripts/run_all.py  reproduces every number: 2 pools x 3 specs x 6 estimators
+outputs/            generated artifacts: data/ between stages, figures/, tables/
+data/raw/lalonde/   the four source files, with provenance
 ```
+
+Notebooks hand data to each other through files in `outputs/data/` rather than
+through memory, so each stage can be re-run on its own and a reader can inspect
+any intermediate product without executing anything.
 
 ## Reproduce
 
 ```bash
 pip install -r requirements.txt
-python validation/lalonde/run_lalonde.py
+python scripts/run_all.py
 ```
 
-Results are written to `validation/lalonde/results/results.csv`, where every row carries a `covers_truth` flag and the number of matched pairs retained, so each claim above can be audited.
+Results are written to `outputs/tables/results.csv`, where every row carries a `covers_truth` flag and the number of matched pairs retained, so each claim above can be audited.
 
 ## Data
 
