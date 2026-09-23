@@ -12,6 +12,8 @@ This repository runs the same pipeline on a dataset where the right answer *is* 
 
 The National Supported Work (NSW) Demonstration was a real randomized experiment run from 1975 to 1979. Disadvantaged workers who applied to a subsidized job-training program were assigned by lottery, so comparing the two randomized arms gives an unbiased estimate of the program's effect on 1978 earnings.
 
+Participants were people facing severe barriers to employment: long-term welfare recipients, ex-offenders, recovering addicts, and school dropouts. The program gave them 9 to 18 months of supervised paid work across ten cities. Applicants outnumbered places, so admission was decided by lottery — which is the only reason a ground truth exists here at all. [Fuller background](docs/background.md).
+
 | | Estimate | 95% CI |
 |---|---|---|
 | **Experimental benchmark (ATT)** | **+$1,794** | [474, 3,115] |
