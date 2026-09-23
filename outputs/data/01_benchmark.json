@@ -1,0 +1,11 @@
+{
+  "estimand": "ATT",
+  "outcome": "re78",
+  "estimate": 1794.342404270271,
+  "ci_lo": 474.0104698180371,
+  "ci_hi": 3114.6743387225047,
+  "p_value": 0.007892977714517335,
+  "n_treated": 185,
+  "n_control": 260,
+  "source": "NSW randomized experiment (Dehejia-Wahba re74 subsample)"
+}

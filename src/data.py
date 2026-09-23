@@ -40,50 +40,113 @@ OUTCOME = "re78"
 def load_raw(which: str) -> pd.DataFrame:
     """Read one of the four source files by key: nsw_treated, nsw_control, cps, psid.
 
-    TODO(stella): pd.read_csv with sep=r"\\s+", header=None, names=COLUMNS.
+    The files have no header row and are whitespace separated, so the column names
+    have to be supplied. Every value is numeric.
     """
-    raise NotImplementedError
+    if which not in FILES:
+        raise ValueError(f"unknown file {which!r}; expected one of {list(FILES)}")
+    return pd.read_csv(RAW_DIR / FILES[which], sep=r"\s+", header=None, names=COLUMNS)
 
 
-def load_lalonde() -> dict[str, pd.DataFrame]:
+def load_lalonde() -> dict:
     """Read all four files and return them keyed the same way as FILES."""
-    raise NotImplementedError
+    return {k: load_raw(k) for k in FILES}
+
+
+def add_derived(df: pd.DataFrame) -> pd.DataFrame:
+    """Add the columns every downstream stage expects.
+
+    ``u74`` / ``u75`` flag zero earnings in the two pre-treatment years. They matter
+    more than they look: a large share of program participants earned nothing at all,
+    while almost all survey respondents earned something, so the indicator carries
+    information the continuous earnings variable alone does not.
+
+    ``employed78`` is a binary version of the outcome, useful for showing that the
+    pipeline works on incidence metrics and not only on continuous means.
+    """
+    df = df.copy()
+    df["u74"] = (df["re74"] == 0).astype(int)
+    df["u75"] = (df["re75"] == 0).astype(int)
+    df["employed78"] = (df["re78"] > 0).astype(int)
+    return df
+
+
+def add_dw_terms(df: pd.DataFrame) -> pd.DataFrame:
+    """Add the squared and interaction terms used by the Dehejia-Wahba specification."""
+    df = df.copy()
+    df["age2"] = df["age"] ** 2
+    df["age3"] = df["age"] ** 3
+    df["educ2"] = df["educ"] ** 2
+    df["re74_2"] = df["re74"] ** 2
+    df["re75_2"] = df["re75"] ** 2
+    df["educ_re74"] = df["educ"] * df["re74"]
+    return df
+
+
+def build_experimental() -> pd.DataFrame:
+    """Stack the two randomized NSW arms.
+
+    Assignment here was by lottery, so a plain difference in ``re78`` between the arms
+    is already an unbiased estimate. This frame is what produces the benchmark that
+    everything else is scored against.
+    """
+    raw = load_lalonde()
+    df = pd.concat([raw["nsw_treated"], raw["nsw_control"]], ignore_index=True)
+    df["pool"] = "nsw_experimental"
+    return add_dw_terms(add_derived(df))
 
 
 def build_observational(pool: str) -> pd.DataFrame:
     """Stack the NSW treated arm on top of a survey control pool ('cps' or 'psid').
 
-    This is the step that manufactures the confounding: the treated units are real
-    program participants, the controls are ordinary survey respondents who are older,
-    better educated and far higher earning. Everything downstream exists to undo it.
+    This is the step that manufactures the confounding. The treated units are real
+    program participants; the controls are ordinary survey respondents who are older,
+    better educated and far higher earning, and who were never part of the experiment.
+    Everything downstream exists to undo the resulting bias.
 
-    TODO(stella): concat, reset index, and add any derived columns you want here
-    (for example the zero-earnings indicators u74 and u75, which turn out to matter).
+    The two pools are kept separate on purpose and must never be concatenated. They
+    are two independent replications of the same test at different difficulty levels:
+    CPS offers 15,992 candidates and PSID only 2,490, and PSID respondents sit further
+    from the treated group on every covariate. Pooling them would let the matcher draw
+    from whichever pool is easier and would hide exactly the overlap problem the
+    project is meant to expose.
     """
-    raise NotImplementedError
+    if pool not in ("cps", "psid"):
+        raise ValueError(f"pool must be 'cps' or 'psid', got {pool!r}")
+    raw = load_lalonde()
+    df = pd.concat([raw["nsw_treated"], raw[pool]], ignore_index=True)
+    df["pool"] = pool
+    return add_dw_terms(add_derived(df))
 
 
-def build_experimental() -> pd.DataFrame:
-    """Stack the two randomized NSW arms. Use this to compute the benchmark."""
-    raise NotImplementedError
+_SPECS = {
+    "demographics": ["age", "educ", "black", "hisp", "married", "nodegree"],
+    "with_earnings": ["age", "educ", "black", "hisp", "married", "nodegree",
+                      "re74", "re75", "u74", "u75"],
+    "dw": ["age", "educ", "black", "hisp", "married", "nodegree",
+           "re74", "re75", "u74", "u75",
+           "age2", "age3", "educ2", "re74_2", "re75_2", "educ_re74"],
+}
 
 
-def covariate_spec(name: str) -> list[str]:
+def covariate_spec(name: str) -> list:
     """Return the covariate column names for one modelling specification.
 
     Three specifications worth comparing, because the choice changes the answer:
 
     ``demographics``
-        age, educ, black, hisp, married, nodegree. Deliberately omits pre-treatment
-        earnings, which is what makes it fail.
+        Age, education, race, marital status, degree. Deliberately omits pre-treatment
+        earnings. Running the whole pipeline on this specification is what demonstrates
+        that an unmeasured confounder flips the sign of the conclusion.
     ``with_earnings``
-        adds re74, re75 and the zero-earnings indicators u74, u75.
+        Adds 1974 and 1975 earnings plus the zero-earnings indicators.
     ``dw``
-        the Dehejia-Wahba specification: adds squared and interaction terms.
-
-    TODO(stella): return the list for each name, raise ValueError otherwise.
+        The Dehejia-Wahba specification: adds squared and interaction terms so the
+        propensity model can bend rather than only tilt.
     """
-    raise NotImplementedError
+    if name not in _SPECS:
+        raise ValueError(f"unknown spec {name!r}; expected one of {list(_SPECS)}")
+    return list(_SPECS[name])
 
 
 def save_stage(df: pd.DataFrame, name: str) -> pathlib.Path:
