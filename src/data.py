@@ -89,6 +89,52 @@ def data_quality_report(df: pd.DataFrame) -> pd.DataFrame:
     return out.round(2)
 
 
+def detect_ceiling(s: pd.Series, threshold: float = 0.01) -> dict:
+    """Test one numeric column for censoring at its upper bound.
+
+    A continuous measurement should have an essentially unique maximum. When a
+    noticeable share of rows sit on exactly the largest value, the variable was
+    almost certainly capped before release rather than measured that way.
+
+    Returns the maximum, the share of rows equal to it, and a boolean verdict.
+    """
+    top = s.max()
+    share = float((s == top).mean())
+    return {"max": float(top), "share_at_max": share * 100,
+            "looks_censored": share >= threshold}
+
+
+def compare_files(raw: dict = None, ceiling_cols: list = None) -> pd.DataFrame:
+    """One row per source file, one column per quality check.
+
+    Run this *before* pooling anything. Quality problems belong to a file, not to
+    the dataset as a whole, and pooling averages them away: on this data the pooled
+    maximum of 1978 earnings comes from PSID and looks perfectly healthy, which
+    completely hides the fact that CPS is capped with a quarter of its rows sitting
+    on the cap. Pool only once the per-file answers agree.
+    """
+    raw = load_lalonde() if raw is None else raw
+    ceiling_cols = ["re74", "re75", "re78"] if ceiling_cols is None else ceiling_cols
+
+    rows = {}
+    for name, df in raw.items():
+        rec = {
+            "n_rows": len(df),
+            "n_missing": int(df.isna().sum().sum()),
+            "n_negative_earnings": int((df[ceiling_cols] < 0).sum().sum()),
+            "n_duplicated": int(df.duplicated().sum()),
+            "pct_duplicated": df.duplicated().mean() * 100,
+            "n_educ_zero": int((df["educ"] == 0).sum()),
+        }
+        for c in ceiling_cols:
+            ceil = detect_ceiling(df[c])
+            rec[f"{c}_max"] = ceil["max"]
+            rec[f"{c}_pct_at_max"] = ceil["share_at_max"]
+            rec[f"{c}_censored"] = ceil["looks_censored"]
+        rows[name] = rec
+    return pd.DataFrame(rows).T.round(2)
+
+
 def load_lalonde() -> dict:
     """Read all four files and return them keyed the same way as FILES."""
     return {k: load_raw(k) for k in FILES}
