@@ -12,6 +12,14 @@ Background: four files, ten columns each, no header, whitespace separated.
 experiment, so comparing them gives the unbiased benchmark. An observational study
 is built by discarding the randomized controls and substituting survey respondents
 from ``cps_controls`` or ``psid_controls``, who were never part of the experiment.
+
+**One row is one person.** The three earnings years are stored as three columns, not
+three rows, so this is wide format rather than panel data in long format. That matters
+for reading the duplicate rows: identical records are different people colliding on ten
+coarse variables, not one person appearing repeatedly. If the data really were panel,
+propensity estimation would treat each row as an independent observation, over-weighting
+people with more rows and understating standard errors, and the fix would be to collapse
+to one row per person or to cluster standard errors on person.
 """
 from __future__ import annotations
 
@@ -36,16 +44,49 @@ FILES = {
 TREATMENT = "treat"
 OUTCOME = "re78"
 
+# Columns that are 0/1 indicators rather than measurements.
+#
+# These are stored as int8, not pandas "category". They take part in arithmetic
+# throughout: df.treat.mean() is the treated share, y[t == 1] subsets an arm, and
+# scikit-learn's fit(X, y) wants a numeric label. A categorical dtype would break
+# all three. The rule of thumb: a binary indicator used in modelling is int8 or
+# bool; "category" is for unordered variables with three or more levels that need
+# encoding before they can enter a model. Every categorical here is already binary,
+# so nothing in this project needs the category dtype.
+INDICATORS = ["treat", "black", "hisp", "married", "nodegree"]
+
 
 def load_raw(which: str) -> pd.DataFrame:
     """Read one of the four source files by key: nsw_treated, nsw_control, cps, psid.
 
     The files have no header row and are whitespace separated, so the column names
-    have to be supplied. Every value is numeric.
+    have to be supplied. Everything arrives as float64; the indicator columns are
+    narrowed to int8 so that summary tables stop reporting a standard deviation for
+    a yes/no field.
     """
     if which not in FILES:
         raise ValueError(f"unknown file {which!r}; expected one of {list(FILES)}")
-    return pd.read_csv(RAW_DIR / FILES[which], sep=r"\s+", header=None, names=COLUMNS)
+    df = pd.read_csv(RAW_DIR / FILES[which], sep=r"\s+", header=None, names=COLUMNS)
+    return df.astype({c: "int8" for c in INDICATORS})
+
+
+def data_quality_report(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-column summary of the checks worth running before any modelling.
+
+    Returns missing counts, distinct values, min/max, and the share of zeros. The
+    zero share matters here because earnings are heavily zero-inflated: a large
+    share of program participants earned nothing at all in the pre-treatment years,
+    which is information a continuous variable alone cannot express.
+    """
+    out = pd.DataFrame({
+        "dtype": df.dtypes.astype(str),
+        "n_missing": df.isna().sum(),
+        "n_distinct": df.nunique(),
+        "min": df.min(numeric_only=True),
+        "max": df.max(numeric_only=True),
+        "pct_zero": (df == 0).mean() * 100,
+    })
+    return out.round(2)
 
 
 def load_lalonde() -> dict:
@@ -141,8 +182,22 @@ def covariate_spec(name: str) -> list:
     ``with_earnings``
         Adds 1974 and 1975 earnings plus the zero-earnings indicators.
     ``dw``
-        The Dehejia-Wahba specification: adds squared and interaction terms so the
-        propensity model can bend rather than only tilt.
+        The specification from Dehejia and Wahba (1999): adds squared and interaction
+        terms so the propensity model can bend rather than only tilt.
+
+    Two known redundancies, kept deliberately because they are what the literature
+    used, not because they went unnoticed. ``nodegree`` is a deterministic function of
+    ``educ`` (it is exactly ``educ < 12``, with no exceptions anywhere in the data), so
+    it carries no independent information. The ``dw`` specification compounds this by
+    also including ``educ2``, meaning three of its columns encode one variable. This
+    does not invalidate a propensity score, which only needs to balance covariates, but
+    it does make individual coefficients uninterpretable.
+
+    ``black`` and ``hisp`` are already k-1 dummy coding of a three-level race variable:
+    they are mutually exclusive, and the third level is the implicit reference group.
+    Do not one-hot encode them again; adding a third indicator would make the set
+    perfectly collinear. Note that the reference group pools everyone who is neither
+    Black nor Hispanic, so white, Asian and other respondents cannot be distinguished.
     """
     if name not in _SPECS:
         raise ValueError(f"unknown spec {name!r}; expected one of {list(_SPECS)}")

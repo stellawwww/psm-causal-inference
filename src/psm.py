@@ -87,24 +87,58 @@ def nn_match(ps: np.ndarray, t: np.ndarray, caliper: float, scale: str = "logit"
 
 
 # ------------------------------------------------------------------- balance
+def reference_sd(X: pd.DataFrame, t: np.ndarray, kind: str = "treated") -> pd.Series:
+    """The denominator for standardized mean differences, computed once and reused.
+
+    ``treated`` uses the treated group's standard deviation alone. This is the
+    convention for ATT, and it is what this project uses, for two reasons.
+
+    First, it keeps comparisons honest across samples. The control group's own
+    dispersion is a property of which pool you happened to draw from, not of the
+    imbalance being measured, so letting it into the denominator lets a wide control
+    pool disguise a large gap. On this data the CPS and PSID pools look equally
+    imbalanced on 1975 earnings under a pooled denominator (1.75 against 1.77) and
+    very differently imbalanced under a fixed one (3.76 against 5.45), which is the
+    honest reading: the PSID gap really is 45% larger.
+
+    Second, it keeps before and after comparable. A denominator recomputed after
+    matching moves under your feet, so balance can appear to improve purely because
+    the matched controls are less dispersed than the original pool.
+
+    ``pooled`` is the ATE convention and is offered for completeness.
+    """
+    if kind == "treated":
+        return X[t == 1].std(ddof=1)
+    if kind == "pooled":
+        s1, s0 = X[t == 1].std(ddof=1), X[t == 0].std(ddof=1)
+        return np.sqrt((s1 ** 2 + s0 ** 2) / 2)
+    raise ValueError(f"kind must be 'treated' or 'pooled', got {kind!r}")
+
+
 def smd(X: pd.DataFrame, t: np.ndarray, w: np.ndarray | None = None,
         ref_sd: pd.Series | None = None) -> pd.Series:
-    """Standardized mean difference per covariate. Denominator is the pooled SD of
-    the *reference* (pre-match) sample so before/after values are comparable."""
+    """Standardized mean difference per covariate.
+
+    Pass ``ref_sd`` to hold the denominator fixed across a set of comparisons; see
+    :func:`reference_sd`. When omitted it defaults to the treated group's SD, matching
+    the ATT estimand this project targets.
+    """
     w = np.ones(len(t)) if w is None else w
     m1 = np.average(X[t == 1], axis=0, weights=w[t == 1])
     m0 = np.average(X[t == 0], axis=0, weights=w[t == 0])
     if ref_sd is None:
-        s1, s0 = X[t == 1].std(ddof=1), X[t == 0].std(ddof=1)
-        ref_sd = np.sqrt((s1 ** 2 + s0 ** 2) / 2)
+        ref_sd = reference_sd(X, t)
     return pd.Series((m1 - m0) / ref_sd.values, index=X.columns)
 
 
 def balance_table(X: pd.DataFrame, t: np.ndarray, pairs: pd.DataFrame,
-                  w: np.ndarray | None = None) -> pd.DataFrame:
-    """SMD before matching, after matching, and (optionally) under IPW weights."""
-    s1, s0 = X[t == 1].std(ddof=1), X[t == 0].std(ddof=1)
-    ref = np.sqrt((s1 ** 2 + s0 ** 2) / 2)
+                  w: np.ndarray | None = None, sd_kind: str = "treated") -> pd.DataFrame:
+    """SMD before matching, after matching, and optionally under IPW weights.
+
+    The denominator is computed once from the pre-match sample and reused for every
+    column, so the three are directly comparable.
+    """
+    ref = reference_sd(X, t, sd_kind)
     out = pd.DataFrame({"before": smd(X, t, ref_sd=ref)})
     if len(pairs):
         idx = np.r_[pairs.treated.values, pairs.control.values]
