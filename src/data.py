@@ -13,13 +13,20 @@ experiment, so comparing them gives the unbiased benchmark. An observational stu
 is built by discarding the randomized controls and substituting survey respondents
 from ``cps_controls`` or ``psid_controls``, who were never part of the experiment.
 
-**One row is one person.** The three earnings years are stored as three columns, not
-three rows, so this is wide format rather than panel data in long format. That matters
-for reading the duplicate rows: identical records are different people colliding on ten
-coarse variables, not one person appearing repeatedly. If the data really were panel,
-propensity estimation would treat each row as an independent observation, over-weighting
-people with more rows and understating standard errors, and the fix would be to collapse
-to one row per person or to cluster standard errors on person.
+**A note on what a row is.** The source documentation calls rows "observations" and
+never "individuals", and the files carry no identifier, so one row being one person is
+an inference rather than a documented fact. It rests on two things. The three earnings
+years are stored as columns rather than rows, so this is wide format and a person has no
+structural reason to recur. And CPS-1 was built from Westat's Matched Current Population
+Survey-Social Security Administration File, which is keyed on the person; that matching
+is also why three separate years of earnings can sit on one row at all, since a single
+CPS interview asks only about the previous year's income.
+
+The inference matters for reading the duplicate rows: identical records are taken to be
+different people colliding on ten coarse variables, not one person appearing repeatedly.
+If that were wrong, propensity estimation would treat repeated rows as independent
+observations, over-weighting those people and understating standard errors, and the
+remedy would be cluster-robust standard errors rather than deletion.
 """
 from __future__ import annotations
 
@@ -102,6 +109,59 @@ def detect_ceiling(s: pd.Series, threshold: float = 0.01) -> dict:
     share = float((s == top).mean())
     return {"max": float(top), "share_at_max": share * 100,
             "looks_censored": share >= threshold}
+
+
+def duplicate_profile(raw: dict = None) -> pd.DataFrame:
+    """Per file, how many rows are duplicated and where those rows sit.
+
+    Two counts, because there are two sensible questions and they give different
+    numbers. ``repeats_only`` is ``duplicated()``: rows that repeat something seen
+    earlier, which is what de-duplication would delete. ``rows_in_group`` is
+    ``duplicated(keep=False)``: every row that has a twin anywhere, which is how many
+    rows are involved in the phenomenon. The gap between them is the number of
+    distinct profiles that repeat.
+
+    ``pct_all_years_zero`` is the share of the rows in duplicate groups that report
+    no earnings in any of the three years. It separates the two ways a row can lose
+    the information that would otherwise make it unique.
+    """
+    raw = load_lalonde() if raw is None else raw
+    earn = ["re74", "re75", "re78"]
+    rows = {}
+    for name, df in raw.items():
+        in_group = df.duplicated(keep=False)
+        dups = df[in_group]
+        rows[name] = {
+            "n_rows": len(df),
+            "repeats_only": int(df.duplicated().sum()),
+            "rows_in_group": int(in_group.sum()),
+            "distinct_profiles": int(in_group.sum()) - int(df.duplicated().sum()),
+            "largest_group": int(dups.groupby(COLUMNS).size().max()) if len(dups) else 0,
+            "pct_all_years_zero": float((dups[earn] == 0).all(axis=1).mean() * 100) if len(dups) else 0.0,
+        }
+    out = pd.DataFrame(rows).T
+    counts = ["n_rows", "repeats_only", "rows_in_group", "distinct_profiles", "largest_group"]
+    return out.astype({c: int for c in counts}).round({"pct_all_years_zero": 1})
+
+
+def earnings_resolution(raw: dict = None) -> pd.DataFrame:
+    """How finely each file records earnings.
+
+    Earnings is the only column with enough resolution to separate two people who
+    match on the coarse demographics, so how many distinct values it takes decides
+    how often rows collide. Counts positive values only, since zero is shared by
+    construction and would flatter every file equally.
+    """
+    raw = load_lalonde() if raw is None else raw
+    rows = {}
+    for name, df in raw.items():
+        rec = {}
+        for c in ["re74", "re75", "re78"]:
+            v = df.loc[df[c] > 0, c]
+            rec[f"{c}_n_positive"] = len(v)
+            rec[f"{c}_n_distinct"] = int(v.nunique())
+        rows[name] = rec
+    return pd.DataFrame(rows).T.astype(int)
 
 
 def compare_files(raw: dict = None, ceiling_cols: list = None) -> pd.DataFrame:

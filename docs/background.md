@@ -89,6 +89,30 @@ This repository reproduces the core of his finding before any adjustment is appl
 Both say the program destroyed participants' earnings. Both are off by more than ten thousand
 dollars, in the wrong direction.
 
+## Where the comparison groups actually come from
+
+The two survey files are not raw extracts, and the difference between them explains several
+things the data-preparation notebook runs into.
+
+**CPS-1** comes from Westat's Matched Current Population Survey–Social Security Administration
+File, which links CPS survey records to Social Security earnings records. That matching is why
+three separate years of earnings can appear on one row at all: a single CPS interview asks only
+about the previous year's income, so no one interview could produce 1974, 1975 and 1978 together.
+It also explains the ceiling in the CPS earnings columns. Social Security recorded income only up
+to the amount that was actually taxed, so anything above the taxable maximum was never written
+down. A quarter of CPS rows sit on exactly that ceiling for 1978 earnings.
+
+**PSID-1** comes from the Panel Study of Income Dynamics, which has followed the same families
+since 1968 and collects income by asking respondents. There is no ceiling, because nobody was
+reading off a payroll filing, but the values are far coarser: PSID records only 610 distinct
+positive amounts for 1974 earnings across 2,275 people, against CPS's 7,332 across 14,079. People
+answer income questions in round figures.
+
+Neither survey carries an identifier in these files, and the source documentation describes rows
+as "observations" rather than individuals, so treating one row as one person is an inference. It
+rests on the wide format, where the three earnings years are columns rather than rows, and on the
+CPS-SSA match being performed at the person level.
+
 ## Why it became the standard test
 
 Five properties, and it is rare for a dataset to have all of them at once.
