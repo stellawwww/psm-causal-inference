@@ -257,11 +257,12 @@ def build_experimental() -> pd.DataFrame:
     Assignment here was by lottery, so a plain difference in ``re78`` between the arms
     is already an unbiased estimate. This frame is what produces the benchmark that
     everything else is scored against.
+
+    Like :func:`build_observational`, this returns the ten source columns only.
     """
     raw = load_lalonde()
     df = pd.concat([raw["nsw_treated"], raw["nsw_control"]], ignore_index=True)
-    df["pool"] = "nsw_experimental"
-    return add_dw_terms(add_derived(df))
+    return df[COLUMNS]
 
 
 def build_observational(pool: str) -> pd.DataFrame:
@@ -278,13 +279,18 @@ def build_observational(pool: str) -> pd.DataFrame:
     from the treated group on every covariate. Pooling them would let the matcher draw
     from whichever pool is easier and would hide exactly the overlap problem the
     project is meant to expose.
+
+    Returns the ten source columns and nothing else. The cleaning stage stops at the
+    data as collected: zero-earnings flags and polynomial terms are modelling choices
+    that have to be judged against covariate balance, so they are built in notebook 02
+    with :func:`add_derived` and :func:`add_dw_terms` rather than written into the
+    cleaned sample here.
     """
     if pool not in ("cps", "psid"):
         raise ValueError(f"pool must be 'cps' or 'psid', got {pool!r}")
     raw = load_lalonde()
     df = pd.concat([raw["nsw_treated"], raw[pool]], ignore_index=True)
-    df["pool"] = pool
-    return add_dw_terms(add_derived(df))
+    return df[COLUMNS]
 
 
 _SPECS = {
