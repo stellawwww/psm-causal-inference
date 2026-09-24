@@ -100,3 +100,69 @@ def forest_plot(results: pd.DataFrame, truth: float, name: str, title: str = "",
       - rows whose CI misses the benchmark drawn in a different colour
     """
     raise NotImplementedError("forest_plot is yours to write in notebook 04")
+
+
+def dag_plot(covariates: list, name: str, treatment: str = "Treatment\nNSW program",
+             outcome: str = "Outcome\n1978 earnings",
+             unobserved: str = "U  (unobserved)\nmotivation, health,\nconviction history,\nlocal labor market",
+             title: str = "") -> pathlib.Path:
+    """Draw the causal graph behind the covariate choice.
+
+    ``covariates`` is a list of dicts with ``name``, ``causes_treatment`` and
+    ``causes_outcome``. The same list drives the printed justification table in the
+    notebook, so the picture and the prose cannot drift apart.
+
+    Laid out by hand rather than by a graph library. A force-directed layout of a
+    graph this small reads worse than a deliberate one, and hand placement keeps the
+    thing the reader needs to see -- that every arrow points *into* treatment and
+    outcome, and that the dashed ones are the reason the backdoor is not closed --
+    in the same place every time.
+    """
+    n = len(covariates)
+    fig, ax = plt.subplots(figsize=(FIGSIZE[0] * 1.15, 0.47 * n + 2.4))
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.axis("off")
+
+    x_cov, x_t, x_y = 0.50, 0.11, 0.89
+    y_top, y_bot = 0.80, 0.16
+    ys = np.linspace(y_top, y_bot, n) if n > 1 else [0.5]
+    y_arm, y_u = 0.075, 0.94
+
+    def box(x, y, text, fc, ec, ls="-", fs=9, weight="normal"):
+        ax.text(x, y, text, ha="center", va="center", fontsize=fs, weight=weight, zorder=3,
+                bbox=dict(boxstyle="round,pad=0.42", facecolor=fc, edgecolor=ec,
+                          linestyle=ls, linewidth=1.3))
+
+    def arrow(p0, p1, color, ls="-", lw=1.0, alpha=0.55, rad=0.0, z=1):
+        ax.annotate("", xy=p1, xytext=p0, zorder=z,
+                    arrowprops=dict(arrowstyle="-|>", color=color, linestyle=ls,
+                                    linewidth=lw, alpha=alpha, shrinkA=13, shrinkB=15,
+                                    connectionstyle=f"arc3,rad={rad}"))
+
+    C_T, C_Y, C_U, C_COV = "#55a868", "#4c72b0", "#8172b2", "#f0f0f0"
+
+    # covariate -> treatment (left) and covariate -> outcome (right)
+    for y, c in zip(ys, covariates):
+        if c["causes_treatment"]:
+            arrow((x_cov, y), (x_t, y_arm), C_T, lw=1.0)
+        if c["causes_outcome"]:
+            arrow((x_cov, y), (x_y, y_arm), C_Y, lw=1.0)
+        box(x_cov, y, c["name"], C_COV, "#999999")
+
+    # the effect we are after
+    arrow((x_t, y_arm), (x_y, y_arm), "black", lw=2.4, alpha=0.9, z=2)
+    ax.text(0.5, y_arm - 0.055, "the effect we want to estimate",
+            ha="center", va="center", fontsize=8.5, style="italic", color="#444444")
+
+    # unobserved causes: the backdoor that stays open
+    box(x_cov, y_u, unobserved, "white", C_U, ls="--", fs=8)
+    arrow((x_cov, y_u), (x_t, y_arm), C_U, ls="--", lw=1.4, alpha=0.85, rad=0.30)
+    arrow((x_cov, y_u), (x_y, y_arm), C_U, ls="--", lw=1.4, alpha=0.85, rad=-0.30)
+
+    box(x_t, y_arm, treatment, "#dbeddb", C_T, fs=9, weight="bold")
+    box(x_y, y_arm, outcome, "#dbe3f0", C_Y, fs=9, weight="bold")
+
+    ax.text(0.02, 0.985, "solid = measured, and controlled for\ndashed = unmeasured, and cannot be",
+            ha="left", va="top", fontsize=8, color="#444444")
+    if title:
+        ax.set_title(title, fontsize=11, pad=14)
+    return save_fig(fig, name)
