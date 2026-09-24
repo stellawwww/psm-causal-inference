@@ -8,7 +8,7 @@ import sys, pathlib
 import numpy as np, pandas as pd
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from src import psm, figures
+from src import psm, figures, data
 
 RAW = ROOT / "data/raw/lalonde"
 OUT = ROOT / "outputs" / "tables"; OUT.mkdir(parents=True, exist_ok=True)
@@ -18,21 +18,20 @@ nsw_t, nsw_c = load("nswre74_treated"), load("nswre74_control")
 pools = {"CPS": load("cps_controls"), "PSID": load("psid_controls")}
 
 
+# Specifications are defined once, in src/data.py. This script used to name its own
+# columns under its own labels, which meant the notebooks and results.csv described the
+# same models under different names and could not be cross-referenced.
+HEADLINE = "with_earnings"          # the covariate set the DAG in notebook 02 justifies
+SPECS = ["demographics", HEADLINE]
+
+
 def features(df: pd.DataFrame, spec: str) -> pd.DataFrame:
-    X = df[["age", "educ", "black", "hisp", "married", "nodegree"]].copy()
-    if spec == "no_earnings":          # deliberately omit pre-treatment earnings
-        return X
-    X["re74"], X["re75"] = df.re74, df.re75
-    X["u74"], X["u75"] = (df.re74 == 0).astype(int), (df.re75 == 0).astype(int)
-    if spec == "dw":                   # Dehejia-Wahba style nonlinear terms
-        X["age2"], X["age3"] = df.age ** 2, df.age ** 3
-        X["educ2"] = df.educ ** 2
-        X["re74_2"], X["re75_2"] = df.re74 ** 2, df.re75 ** 2
-        X["educ_re74"] = df.educ * df.re74
-    return X
+    """Columns for one specification, per src.data.covariate_spec."""
+    df = data.add_derived(df)
+    return df[data.covariate_spec(spec)]
 
 
-BALANCE_COLS = ["age", "educ", "black", "hisp", "married", "nodegree", "re74", "re75", "u74", "u75"]
+BALANCE_COLS = data.covariate_spec(HEADLINE)
 
 # ------------------------------------------------------------ benchmark
 truth = nsw_t.re78.mean() - nsw_c.re78.mean()
@@ -50,12 +49,12 @@ for pool_name, pool in pools.items():
     rows.append(dict(pool=pool_name, spec="-", method="naive difference", est=naive, ci_lo=np.nan, ci_hi=np.nan, n=len(df)))
     print(f"\n=== {pool_name} controls (n={len(pool):,}) | naive diff = {naive:,.0f}")
 
-    for spec in ["no_earnings", "basic", "dw"]:
+    for spec in SPECS:
         X = features(df, spec)
-        Xb = features(df, "basic")[BALANCE_COLS]
-        ps = psm.fit_propensity(X, t, model="logit", C=1.0)
+        Xb = features(df, HEADLINE)[BALANCE_COLS]
+        ps = psm.fit_propensity(X, t, model="logit")   # unpenalized; see psm.NO_PENALTY
         auc_note = f"ps mean t={ps[t==1].mean():.3f} c={ps[t==0].mean():.3f}; controls with ps>0.5: {(ps[t==0]>0.5).sum()}"
-        print(f"\n  spec={spec:12s} {auc_note}")
+        print(f"\n  spec={spec:14s} {auc_note}")
 
         # matching variants
         variants = {
@@ -72,8 +71,8 @@ for pool_name, pool in pools.items():
             mx = bal["matched"].abs().max()
             rows.append(dict(pool=pool_name, spec=spec, method=label, est=r["est"], ci_lo=r["ci_lo"], ci_hi=r["ci_hi"], n=r["n_pairs"], max_abs_smd=mx))
             print(f"    {label:42s} ATT={r['est']:8,.0f}  CI[{r['ci_lo']:7,.0f},{r['ci_hi']:7,.0f}]  pairs={r['n_pairs']:3d}  max|SMD|={mx:.2f}")
-            if spec == "dw" and "with replace" in label:
-                figures.love_plot(bal, f"love_{pool_name.lower()}", f"{pool_name}: balance, DW spec")
+            if spec == HEADLINE and "with replace" in label:
+                figures.love_plot(bal, f"love_{pool_name.lower()}", f"{pool_name}: balance, {HEADLINE} spec")
                 figures.overlap_plot(ps, t, f"overlap_{pool_name.lower()}", f"{pool_name}: propensity overlap")
 
         # weighting / doubly robust

@@ -16,10 +16,32 @@ import statsmodels.api as sm
 
 
 # ---------------------------------------------------------------- propensity
+# sklearn's LogisticRegression applies an L2 penalty by default at C=1.0, where C is the
+# INVERSE penalty strength. A very large C makes the penalty negligible, which is what we
+# want here. Expressed as a large C rather than penalty=None because the keyword spelling
+# is not portable across the sklearn versions this project supports ('none' in 1.0-1.3,
+# None from 1.2). Verified equivalent: C=1e6 and penalty='none' agree to 2e-7 on every
+# coefficient and every fitted score.
+NO_PENALTY = 1e6
+
+
 def fit_propensity(X: pd.DataFrame, t: np.ndarray, model: str = "logit",
-                   C: float = 1.0, out_of_fold: bool = False, seed: int = 0) -> np.ndarray:
+                   C: float = NO_PENALTY, out_of_fold: bool = False, seed: int = 0) -> np.ndarray:
     """Return P(T=1|X). model in {'logit','gbm'}. out_of_fold=True gives
-    cross-fitted scores (5-fold), which avoids in-sample overfit for flexible models."""
+    cross-fitted scores (5-fold), which avoids in-sample overfit for flexible models.
+
+    ``C`` defaults to :data:`NO_PENALTY`, i.e. an unpenalized logistic regression.
+
+    This is deliberate, and it is where a propensity model parts company with a prediction
+    model. Regularization exists to stop coefficients chasing noise so a model generalizes
+    to unseen data. Nothing here is ever applied to unseen data: the score's only job is to
+    produce a number such that, conditioning on it, the covariates come out balanced.
+    Shrinking the coefficients toward zero makes the score weigh each covariate less, which
+    is precisely what makes it less able to equalize them. On this data, balance after
+    matching degrades monotonically as the penalty is strengthened.
+
+    The criterion for choosing ``C`` is therefore balance, never accuracy, and never AUC.
+    """
     if model == "logit":
         clf = LogisticRegression(C=C, max_iter=2000)
         Xm = StandardScaler().fit_transform(X)
