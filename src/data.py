@@ -164,6 +164,27 @@ def earnings_resolution(raw: dict = None) -> pd.DataFrame:
     return pd.DataFrame(rows).T.astype(int)
 
 
+def zero_share(raw: dict = None, cols: tuple = ("re74", "re75", "re78")) -> pd.DataFrame:
+    """Row count and share of exact zeros per earnings column, per source file.
+
+    This is the one thing a boxplot cannot show. When most of a group reports zero,
+    the box collapses onto the axis and a reader cannot tell a genuine pile-up at
+    zero from a plotting failure, so the share is printed alongside the figure.
+
+    Zero here is not a small number, it is the absence of any recorded earnings, and
+    for the program participants it is the majority of the group.
+    """
+    raw = load_lalonde() if raw is None else raw
+    rows = {}
+    for name, df in raw.items():
+        rec = {"n_rows": len(df)}
+        for c in cols:
+            rec[f"{c}_pct_zero"] = float((df[c] == 0).mean() * 100)
+        rows[name] = rec
+    out = pd.DataFrame(rows).T
+    return out.astype({"n_rows": int}).round(1)
+
+
 def compare_files(raw: dict = None, ceiling_cols: list = None) -> pd.DataFrame:
     """One row per source file, one column per quality check.
 
