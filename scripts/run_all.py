@@ -26,8 +26,10 @@ SPECS = ["demographics", HEADLINE]
 
 
 def features(df: pd.DataFrame, spec: str) -> pd.DataFrame:
-    """Columns for one specification, per src.data.covariate_spec."""
-    df = data.add_derived(df)
+    """Columns for one specification, per src.data.covariate_spec.
+
+    Selects only; constructs nothing. Every column is one the source files provide.
+    """
     return df[data.covariate_spec(spec)]
 
 

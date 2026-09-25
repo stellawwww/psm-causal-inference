@@ -35,12 +35,22 @@ def fit_propensity(X: pd.DataFrame, t: np.ndarray, model: str = "logit",
     This is deliberate, and it is where a propensity model parts company with a prediction
     model. Regularization exists to stop coefficients chasing noise so a model generalizes
     to unseen data. Nothing here is ever applied to unseen data: the score's only job is to
-    produce a number such that, conditioning on it, the covariates come out balanced.
-    Shrinking the coefficients toward zero makes the score weigh each covariate less, which
-    is precisely what makes it less able to equalize them. On this data, balance after
-    matching degrades monotonically as the penalty is strengthened.
+    produce a number such that, conditioning on it, the covariates come out balanced. So
+    accuracy and AUC are not the criterion, and a model that predicts treatment perfectly
+    would be a disaster rather than a success.
 
-    The criterion for choosing ``C`` is therefore balance, never accuracy, and never AUC.
+    The reason for *no* penalty is parsimony rather than measured superiority, and the
+    distinction is worth keeping honest. On this project's covariate set the balance
+    evidence does not pick a winner: the CPS pool is better balanced at ``C=1`` (max |SMD|
+    0.240 against 0.307) and the PSID pool at no penalty (0.140 against 0.199). With the
+    two pools disagreeing there is no data-driven choice that is not itself a selection, so
+    the model with no tuning constant is used, because nothing about it has to be defended
+    from the data.
+
+    Note what is *not* an acceptable way to choose ``C`` here, given this repository holds
+    an experimental benchmark: picking whichever value lands nearest the known answer. That
+    is unavailable in any real study, so a pipeline tuned that way would not transfer. See
+    the README on what the benchmark is allowed to be used for.
     """
     if model == "logit":
         clf = LogisticRegression(C=C, max_iter=2000)

@@ -24,19 +24,21 @@ The question becomes: can the pipeline recover $1,794 from the observational dat
 
 ## Headline results
 
-Covariates are the ten selected by the DAG in [notebook 02](notebooks/02_propensity_model.ipynb): age, education, race, marital status, degree, 1974 and 1975 earnings, and a zero-earnings flag for each of those years. The propensity model is an unpenalized logistic regression. Outcome is 1978 earnings in dollars.
+Covariates are the eight selected by the DAG in [notebook 02](notebooks/02_propensity_model.ipynb): age, education, race, marital status, degree, and 1974 and 1975 earnings. Every one is a column the source files provide — nothing is constructed. The propensity model is an unpenalized logistic regression. Outcome is 1978 earnings in dollars.
 
-| Method | CPS controls | PSID controls |
+| Method | CPS controls | PSID controls ⚠ |
 |---|---|---|
 | Naive difference | -8,498 | -15,205 |
-| Matching, 0.2 logit-SD caliper, no replacement | **1,841** [336, 3,345] | -1,134 [-3,505, 1,237] |
-| Matching, with replacement | 1,461 [32, 2,890] | 885 [-571, 2,341] |
-| IPW (ATT weights) | 1,641 [258, 3,024] | 2,783 [1,152, 4,414] |
-| AIPW (doubly robust) | 1,678 [409, 3,099] | 2,914 [374, 5,151] |
+| Matching, 0.2 logit-SD caliper, no replacement | **1,530** [161, 2,900] | 214 [-1,792, 2,220] |
+| Matching, with replacement | 1,654 [276, 3,031] | 2,169 [860, 3,479] |
+| IPW (ATT weights) | 1,091 [-207, 2,389] | 1,610 [-171, 3,392] |
+| AIPW (doubly robust) | 1,342 [164, 2,627] | 2,282 [321, 4,028] |
 
-The naive comparison is not merely biased, it has the **wrong sign** and is off by more than $10,000. After adjustment, **every** estimator on the CPS pool produces a confidence interval covering the experimental benchmark. The PSID pool is the harder test and only three of five do.
+The naive comparison is not merely biased, it has the **wrong sign** and is off by more than $10,000. Every CPS estimate covers the experimental benchmark. The matching estimates also exclude zero; the IPW intervals do not, so on those the program's effect is not distinguishable from nothing.
 
-Covariate balance improves from |SMD| of 3.76 before matching to 0.12 after:
+**⚠ The PSID column is reported but disqualified**, and the reason has nothing to do with its numbers. Caliper matching finds no acceptable partner for **91 of the 185 participants** — and the ones it drops are the youngest, poorest, least likely to be married, with essentially no prior earnings. That is the most disadvantaged half of the program, which is the population the program was built for. Whatever comes out is no longer the ATT; it is the effect on the 94 participants who happened to have counterparts. Nothing in a standard matching output reveals this: you would see 94 pairs, an acceptable balance table, and a confidence interval.
+
+**Balance is not achieved on CPS either.** Matching brings the worst covariate from |SMD| 3.76 down to **0.307** — a large improvement, and still past the conventional 0.25 threshold, with `age` the offender:
 
 ![Covariate balance, CPS pool](outputs/figures/psm_love_cps.png)
 
@@ -44,12 +46,24 @@ Covariate balance improves from |SMD| of 3.76 before matching to 0.12 after:
 
 The interesting findings are not that the method works. They are the conditions under which it fails.
 
-- **Omitting pre-treatment outcomes flips the sign, and the diagnostics do not warn you.** Drop the 1974 and 1975 earnings variables and the CPS estimate moves from **+1,841 to -3,414**. Meanwhile every covariate still in the model balances to |SMD| ≤ **0.055**, far inside the conventional 0.1 threshold — textbook-clean balance on a badly wrong answer. The omitted earnings variables sit at |SMD| 2.12, but you would only know to look at them if you already suspected they mattered.
-- **Matching without replacement can silently change the estimand.** On the PSID pool, no-replacement matching retains only 78 of 185 treated units. The result is no longer the ATT for the treated population, and nothing in the standard output tells you.
-- **Matching with replacement trades the estimand back for balance.** On PSID it keeps all 185 treated units but max |SMD| rises to **0.42**, worse than the conventional 0.25 threshold. The two failure modes are not independent: you are choosing which one to accept.
-- **A fixed caliper on the raw probability scale is fragile.** A caliper of 0.01 keeps 154 of 185 CPS pairs where one of 0.2 logit-SD keeps 175, because a fixed probability width means something different wherever the scores happen to pile up. Calipers in standard deviations of the logit are more portable.
-- **ATT and ATE are different questions.** On PSID they differ by about $3,350, and the ATE interval spans zero because it requires extrapolating to a population containing no comparable treated units.
+- **Omitting pre-treatment outcomes flips the sign, and the diagnostics do not warn you.** Drop the 1974 and 1975 earnings variables and the CPS estimate moves from **+1,530 to -3,414**. Meanwhile every covariate still in the model balances to |SMD| ≤ **0.055**, far inside the conventional 0.1 threshold — textbook-clean balance on a badly wrong answer. The omitted earnings variables sit at |SMD| 2.12, but you would only know to look at them if you already suspected they mattered.
+- **A control pool can silently change the estimand.** PSID matching drops 91 of 185 participants, and drops them non-randomly: the youngest and poorest. The output still reports pairs, balance and an interval. The estimand changed and the diagnostics stayed green.
+- **Matching with replacement trades the estimand back for balance.** On PSID it keeps all 185 treated units but max |SMD| rises to **0.33**; on CPS it rises to 0.41. The two failure modes are not independent — you are choosing which one to accept.
+- **A fixed caliper on the raw probability scale is fragile.** A 0.01 caliper leaves 8 of 185 CPS participants unmatched and 105 of 185 in PSID, where 0.2 logit-SD leaves 0 and 91. A fixed probability width means something different wherever the scores pile up, and here they pile up against zero. Calipers in standard deviations of the logit are more portable.
+- **Good balance is necessary, not sufficient.** PSID's matched sample is the *better balanced* of the two pools (0.14 against CPS's 0.31) and is the one that has to be thrown out. A balance table cannot tell you who is missing from it.
 - **Confidence intervals are wide, and that is the data's fault.** The randomized benchmark itself has a CI spanning $2,641. With 185 treated units, no estimator can be more precise than that. Point estimates matching to the dollar are luck, not evidence.
+
+## What the benchmark is allowed to be used for
+
+This repository holds the answer. That creates a temptation worth naming, because giving in to it would invalidate everything here and **nothing in the output would look wrong**: try covariate sets, calipers and model settings, keep whichever lands nearest $1,794, and present the result as a validation of the method.
+
+So the rule this project runs under:
+
+> **Design decisions use only diagnostics a real study could compute** — covariate balance, common support, how many units survive matching. **The benchmark scores the finished pipeline. It never selects any part of it.**
+
+Two consequences visible above. The propensity model is unpenalized because that is the specification with no tuning constant to choose, not because it landed closest — on this covariate set balance does not favour it consistently. And PSID is disqualified on its 49% match rate, a number any real study could compute, rather than on its distance from the benchmark.
+
+This is what makes the exercise a test rather than a demonstration. A pipeline tuned against the answer would score well here and transfer nowhere.
 
 ## Repository layout
 

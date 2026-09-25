@@ -222,7 +222,15 @@ def load_lalonde() -> dict:
 
 
 def add_derived(df: pd.DataFrame) -> pd.DataFrame:
-    """Add the columns every downstream stage expects.
+    """Build the zero-earnings flags and a binary outcome.
+
+    **Nothing in the current pipeline calls this.** The project models only the columns
+    the source files provide, so constructed covariates are out of scope for now. Kept
+    because the reasoning below is still correct and the flags may earn their place
+    later, but adding them is a decision that has to be made deliberately, not by a
+    helper running on the way past.
+
+    Original note:
 
     ``u74`` / ``u75`` flag zero earnings in the two pre-treatment years. They matter
     more than they look: a large share of program participants earned nothing at all,
@@ -295,8 +303,9 @@ def build_observational(pool: str) -> pd.DataFrame:
 
 _SPECS = {
     "demographics": ["age", "educ", "black", "hisp", "married", "nodegree"],
+    # the eight given pre-treatment columns, exactly as they appear in the files
     "with_earnings": ["age", "educ", "black", "hisp", "married", "nodegree",
-                      "re74", "re75", "u74", "u75"],
+                      "re74", "re75"],
     "dw": ["age", "educ", "black", "hisp", "married", "nodegree",
            "re74", "re75", "u74", "u75",
            "age2", "age3", "educ2", "re74_2", "re75_2", "educ_re74"],
@@ -313,7 +322,9 @@ def covariate_spec(name: str) -> list:
         earnings. Running the whole pipeline on this specification is what demonstrates
         that an unmeasured confounder flips the sign of the conclusion.
     ``with_earnings``
-        Adds 1974 and 1975 earnings plus the zero-earnings indicators.
+        Adds 1974 and 1975 earnings. Nothing here is constructed: every column is one
+        the source files provide. Covariates are selected by the disjunctive cause
+        criterion, argued variable by variable in notebook 02.
     ``dw``
         The specification from Dehejia and Wahba (1999): adds squared and interaction
         terms so the propensity model can bend rather than only tilt.

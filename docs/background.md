@@ -149,7 +149,7 @@ score matching works." It is:
 > cannot tell from inside the analysis whether they do.
 
 This repository demonstrates it on the same data. Drop the 1974 and 1975 earnings variables and
-the CPS estimate moves from **+$1,841 to -$3,414** — a sign flip — while every covariate still in
+the CPS estimate moves from **+$1,530 to -$3,414** — a sign flip — while every covariate still in
 the model balances to a standardized difference of 0.055 or less, comfortably inside the
 conventional threshold. The diagnostics you are allowed to look at stay clean. The confounder you
 did not measure is the one that decides your answer.

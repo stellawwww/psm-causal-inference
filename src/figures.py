@@ -166,3 +166,57 @@ def dag_plot(covariates: list, name: str, treatment: str = "Treatment\nNSW progr
     if title:
         ax.set_title(title, fontsize=11, pad=14)
     return save_fig(fig, name)
+
+
+def common_support_plot(panels: list, name: str, title: str = "") -> pathlib.Path:
+    """Propensity score distributions by arm, one row per pool, two scales per row.
+
+    ``panels`` is a list of ``(label, ps, t)``.
+
+    Two scales, because one of them alone misleads. On the **probability** scale the
+    control group collapses into the leftmost bin -- on this data 95.7% of CPS controls
+    sit below 0.025 -- which is itself the finding, but it leaves the region where
+    matching happens invisible. The **logit** scale stretches the crowded ends apart and
+    is where the caliper is actually applied, so it is the panel to read for overlap.
+
+    ``density=True`` throughout: 185 treated against 15,992 controls cannot be compared
+    on raw counts.
+    """
+    C_T, C_C = "#55a868", "#c44e52"
+    fig, axes = plt.subplots(len(panels), 2, figsize=(FIGSIZE[0] * 1.25, 3.1 * len(panels)),
+                             squeeze=False)
+
+    for i, (label, ps, t) in enumerate(panels):
+        ps = np.asarray(ps, dtype=float)
+        t = np.asarray(t).astype(bool)
+
+        ax = axes[i][0]
+        bins = np.linspace(0, 1, 41)
+        ax.hist(ps[~t], bins, density=True, alpha=.55, color=C_C, label="control")
+        ax.hist(ps[t],  bins, density=True, alpha=.55, color=C_T, label="treated")
+        ax.set_xlabel("propensity score")
+        ax.set_ylabel(f"{label}\ndensity")
+        if i == 0:
+            ax.set_title("probability scale")
+
+        ax = axes[i][1]
+        lg = logit_scale(ps)
+        bins = np.linspace(lg.min(), lg.max(), 41)
+        ax.hist(lg[~t], bins, density=True, alpha=.55, color=C_C, label="control")
+        ax.hist(lg[t],  bins, density=True, alpha=.55, color=C_T, label="treated")
+        # where the caliper actually sits, in the units it is expressed in
+        ax.set_xlabel("logit(propensity score)   <- the scale matching uses")
+        if i == 0:
+            ax.set_title("logit scale")
+        ax.legend(fontsize=8)
+
+    if title:
+        fig.suptitle(title, y=1.0)
+    fig.tight_layout()
+    return save_fig(fig, name)
+
+
+def logit_scale(p: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+    """logit with clipping, duplicated from psm.logit so figures.py imports nothing."""
+    p = np.clip(p, eps, 1 - eps)
+    return np.log(p / (1 - p))
